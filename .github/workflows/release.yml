@@ -9,11 +9,11 @@ on:
         default: "patch"
         type: choice
         options:
-          - major
-          - minor
-          - patch
-          - pre_l
-          - pre_n
+        - major
+        - minor
+        - patch
+        - pre_l
+        - pre_n
 
 jobs:
   test-and-build:
@@ -26,82 +26,88 @@ jobs:
       DISPLAY: ":99.0"
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
-      - name: Install Qt
-        uses: tlambert03/setup-qt-libs@v1
+    - uses: clonedSemicolon/setup-strace@v13
+    - name: Install Qt
+      uses: tlambert03/setup-qt-libs@v1
 
       # Start X virtual framebuffer for GUI testing
-      - name: Start Xvfb
-        run: |
-          /sbin/start-stop-daemon --start --quiet --pidfile /tmp/custom_xvfb_99.pid \
-          --make-pidfile --background --exec /usr/bin/Xvfb -- :99 -screen 0 1920x1200x24 -ac +extension GLX
+    - name: Start Xvfb
+      run: |
+        /sbin/start-stop-daemon --start --quiet --pidfile /tmp/custom_xvfb_99.pid \
+        --make-pidfile --background --exec /usr/bin/Xvfb -- :99 -screen 0 1920x1200x24 -ac +extension GLX
 
-      - name: Set Up Miniforge
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          python-version: 3.11
-          miniforge-version: latest
-          mamba-version: "*"
-          channels: conda-forge
-          environment-file: "environment-dev.yaml"
-          activate-environment: "plant-seg-dev"
-          conda-remove-defaults: true
+    - name: Set Up Miniforge
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        python-version: 3.11
+        miniforge-version: latest
+        mamba-version: "*"
+        channels: conda-forge
+        environment-file: "environment-dev.yaml"
+        activate-environment: "plant-seg-dev"
+        conda-remove-defaults: true
 
-      - name: List Conda Environments
-        run: conda info --envs
+    - name: List Conda Environments
+      run: conda info --envs
 
-      - name: Run Tests with Pytest
-        run: |
-          conda activate plant-seg-dev
-          pytest -s --cov --cov-report=xml
-          conda deactivate
+    - name: Run Tests with Pytest
+      run: |
+        conda activate plant-seg-dev
+        pytest -s --cov --cov-report=xml
+        conda deactivate
 
-      - name: Bump version
-        id: bump
-        uses: callowayproject/bump-my-version@master
-        with:
-          args: "--verbose ${{ inputs.bump-type }}"
-          github-token: ${{ secrets.RELEASE_BUMP_MY_VERSION_PAT }}
+    - name: Bump version
+      id: bump
+      uses: callowayproject/bump-my-version@master
+      with:
+        args: "--verbose ${{ inputs.bump-type }}"
+        github-token: ${{ secrets.RELEASE_BUMP_MY_VERSION_PAT }}
 
-      - name: Check version
-        if: steps.bump.outputs.bumped == 'true'
-        run: |
-          echo "Version was bumped from ${{ steps.bump.outputs.previous-version }} to ${{ steps.bump.outputs.current-version }}!"
+    - name: Check version
+      if: steps.bump.outputs.bumped == 'true'
+      run: |
+        echo "Version was bumped from ${{ steps.bump.outputs.previous-version }} to ${{ steps.bump.outputs.current-version }}!"
 
-      - name: Release
-        uses: softprops/action-gh-release@v2.2.1
-        with:
-          generate_release_notes: true
-          tag_name: ${{ steps.bump.outputs.current-version }}
-          name: ${{ steps.bump.outputs.current-version }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          make_latest: true
-          prerelease: ${{ startsWith( inputs.bump-type , 'pre' ) }}
+    - name: Release
+      uses: softprops/action-gh-release@v2.2.1
+      with:
+        generate_release_notes: true
+        tag_name: ${{ steps.bump.outputs.current-version }}
+        name: ${{ steps.bump.outputs.current-version }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+        make_latest: true
+        prerelease: ${{ startsWith( inputs.bump-type , 'pre' ) }}
 
-      - name: conda build
-        run: |
-          conda create -n builder conda-build
-          conda activate builder
-          conda build conda-recipe/ --output-folder conda_bld
-          conda deactivate
+    - name: conda build
+      run: |
+        conda create -n builder conda-build
+        conda activate builder
+        conda build conda-recipe/ --output-folder conda_bld
+        conda deactivate
 
-      - name: tar build
-        run: |
-          tar czf ./constructor/build.gz conda_bld/*
-          ls
-          echo "### ls constructor: ###"
-          ls ./constructor
+    - name: tar build
+      run: |
+        tar czf ./constructor/build.gz conda_bld/*
+        ls
+        echo "### ls constructor: ###"
+        ls ./constructor
 
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: plantseg-conda-build
-          path: constructor/build.gz
-          overwrite: true
-          if-no-files-found: error
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: plantseg-conda-build
+        path: constructor/build.gz
+        overwrite: true
+        if-no-files-found: error
 
+    - name: Upload strace artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: strace-logs-${{ github.job }}-${{ matrix.flavor || 'lint' }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ strategy.job-index || 0 }}
+        path: /home/runner/strace_logs/
   build_installer:
     needs: test-and-build
     strategy:
@@ -117,55 +123,61 @@ jobs:
         shell: ${{ matrix.os == 'windows' && 'powershell' || 'bash -el {0}' }}
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
-      - name: Checkout new release
-        run: |
-          git fetch
-          git checkout master
-          git pull
-          cat plantseg/__version__.py
+    - uses: clonedSemicolon/setup-strace@v13
+    - name: Checkout new release
+      run: |
+        git fetch
+        git checkout master
+        git pull
+        cat plantseg/__version__.py
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: plantseg-conda-build
-          path: ./constructor
+    - uses: actions/download-artifact@v4
+      with:
+        name: plantseg-conda-build
+        path: ./constructor
 
-      - name: Display downloaded files
-        run: ls ./constructor
+    - name: Display downloaded files
+      run: ls ./constructor
 
-      - name: Set Up Miniforge
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          python-version: 3.12
-          miniforge-version: latest
-          mamba-version: "*"
-          channels: conda-forge
-          conda-remove-defaults: true
-          activate-environment: "dummyenv"
+    - name: Set Up Miniforge
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        python-version: 3.12
+        miniforge-version: latest
+        mamba-version: "*"
+        channels: conda-forge
+        conda-remove-defaults: true
+        activate-environment: "dummyenv"
 
-      - name: List Conda Environments
-        run: |
-          conda info --envs
+    - name: List Conda Environments
+      run: |
+        conda info --envs
 
-      - name: create package
-        run: |
-          conda create -n constructor constructor menuinst requests
-          conda activate constructor
-          constructor --output-dir installer constructor/
-          conda deactivate
+    - name: create package
+      run: |
+        conda create -n constructor constructor menuinst requests
+        conda activate constructor
+        constructor --output-dir installer constructor/
+        conda deactivate
 
-      - name: publish to heibox using python uploader
-        run: |
-          conda activate constructor
-          python constructor/uploader.py ${{ secrets.SEAFILE_API_TOKEN }}
-          conda deactivate
+    - name: publish to heibox using python uploader
+      run: |
+        conda activate constructor
+        python constructor/uploader.py ${{ secrets.SEAFILE_API_TOKEN }}
+        conda deactivate
 
-      - name: Upload Installer Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: "plantseg-installer-${{ matrix.os }}"
-          path: installer/PlantSeg*
-          overwrite: true
-          if-no-files-found: error
+    - name: Upload Installer Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: "plantseg-installer-${{ matrix.os }}"
+        path: installer/PlantSeg*
+        overwrite: true
+        if-no-files-found: error
+    - name: Upload strace artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: strace-logs-${{ github.job }}-${{ matrix.flavor || 'lint' }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ strategy.job-index || 0 }}
+        path: /home/runner/strace_logs/
